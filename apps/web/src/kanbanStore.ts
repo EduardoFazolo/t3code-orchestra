@@ -18,7 +18,7 @@ export interface KanbanBoardState {
   columns: KanbanColumn[];
 }
 
-export type KanbanBoardsByThreadId = Record<string, KanbanBoardState>;
+export type KanbanBoardsByProjectId = Record<string, KanbanBoardState>;
 
 const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: "todo", title: "To-do", color: "#64748b", cards: [] },
@@ -63,52 +63,52 @@ function newId(prefix: string) {
 }
 
 interface KanbanStoreState {
-  boardsByThreadId: KanbanBoardsByThreadId;
-  getBoardForThread: (threadId: string) => KanbanBoardState;
+  boardsByProjectId: KanbanBoardsByProjectId;
+  getBoardForProject: (projectId: string) => KanbanBoardState;
   // Column management
-  addColumn: (threadId: string, title: string, color?: string) => void;
+  addColumn: (projectId: string, title: string, color?: string) => void;
   updateColumn: (
-    threadId: string,
+    projectId: string,
     columnId: string,
     updates: Partial<Pick<KanbanColumn, "title" | "color">>,
   ) => void;
-  deleteColumn: (threadId: string, columnId: string) => void;
+  deleteColumn: (projectId: string, columnId: string) => void;
   // Card management
-  addCard: (threadId: string, columnId: string, title: string, description?: string) => void;
+  addCard: (projectId: string, columnId: string, title: string, description?: string) => void;
   updateCard: (
-    threadId: string,
+    projectId: string,
     columnId: string,
     cardId: string,
     updates: Partial<Pick<KanbanCard, "title" | "description">>,
   ) => void;
-  deleteCard: (threadId: string, columnId: string, cardId: string) => void;
+  deleteCard: (projectId: string, columnId: string, cardId: string) => void;
   moveCard: (
-    threadId: string,
+    projectId: string,
     cardId: string,
     fromColumnId: string,
     toColumnId: string,
     toIndex: number,
   ) => void;
-  reorderCard: (threadId: string, columnId: string, fromIndex: number, toIndex: number) => void;
+  reorderCard: (projectId: string, columnId: string, fromIndex: number, toIndex: number) => void;
 }
 
 function getOrCreateBoard(
-  boardsByThreadId: KanbanBoardsByThreadId,
-  threadId: string,
+  boardsByProjectId: KanbanBoardsByProjectId,
+  projectId: string,
 ): KanbanBoardState {
-  return boardsByThreadId[threadId] ?? getDefaultBoard();
+  return boardsByProjectId[projectId] ?? getDefaultBoard();
 }
 
 function updateBoard(
   state: KanbanStoreState,
-  threadId: string,
+  projectId: string,
   updater: (board: KanbanBoardState) => KanbanBoardState,
 ): Partial<KanbanStoreState> {
-  const current = getOrCreateBoard(state.boardsByThreadId, threadId);
+  const current = getOrCreateBoard(state.boardsByProjectId, projectId);
   return {
-    boardsByThreadId: {
-      ...state.boardsByThreadId,
-      [threadId]: updater(current),
+    boardsByProjectId: {
+      ...state.boardsByProjectId,
+      [projectId]: updater(current),
     },
   };
 }
@@ -116,27 +116,27 @@ function updateBoard(
 export const useKanbanStore = create<KanbanStoreState>()(
   persist(
     (set, get) => ({
-      boardsByThreadId: {},
+      boardsByProjectId: {},
 
-      getBoardForThread(threadId) {
-        return getOrCreateBoard(get().boardsByThreadId, threadId);
+      getBoardForProject(projectId) {
+        return getOrCreateBoard(get().boardsByProjectId, projectId);
       },
 
-      addColumn(threadId, title, color) {
+      addColumn(projectId, title, color) {
         const col: KanbanColumn = color
           ? { id: newId("col"), title, color, cards: [] }
           : { id: newId("col"), title, cards: [] };
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: [...board.columns, col],
           })),
         );
       },
 
-      updateColumn(threadId, columnId, updates) {
+      updateColumn(projectId, columnId, updates) {
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.map((col) =>
               col.id === columnId ? { ...col, ...updates } : col,
@@ -145,21 +145,21 @@ export const useKanbanStore = create<KanbanStoreState>()(
         );
       },
 
-      deleteColumn(threadId, columnId) {
+      deleteColumn(projectId, columnId) {
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.filter((col) => col.id !== columnId),
           })),
         );
       },
 
-      addCard(threadId, columnId, title, description) {
+      addCard(projectId, columnId, title, description) {
         const card: KanbanCard = description
           ? { id: newId("card"), title, description }
           : { id: newId("card"), title };
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.map((col) =>
               col.id === columnId ? { ...col, cards: [...col.cards, card] } : col,
@@ -168,9 +168,9 @@ export const useKanbanStore = create<KanbanStoreState>()(
         );
       },
 
-      updateCard(threadId, columnId, cardId, updates) {
+      updateCard(projectId, columnId, cardId, updates) {
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.map((col) =>
               col.id === columnId
@@ -186,9 +186,9 @@ export const useKanbanStore = create<KanbanStoreState>()(
         );
       },
 
-      deleteCard(threadId, columnId, cardId) {
+      deleteCard(projectId, columnId, cardId) {
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.map((col) =>
               col.id === columnId
@@ -199,9 +199,9 @@ export const useKanbanStore = create<KanbanStoreState>()(
         );
       },
 
-      moveCard(threadId, cardId, fromColumnId, toColumnId, toIndex) {
+      moveCard(projectId, cardId, fromColumnId, toColumnId, toIndex) {
         set((state) =>
-          updateBoard(state, threadId, (board) => {
+          updateBoard(state, projectId, (board) => {
             const fromCol = board.columns.find((c) => c.id === fromColumnId);
             if (!fromCol) return board;
             const card = fromCol.cards.find((c) => c.id === cardId);
@@ -230,9 +230,9 @@ export const useKanbanStore = create<KanbanStoreState>()(
         );
       },
 
-      reorderCard(threadId, columnId, fromIndex, toIndex) {
+      reorderCard(projectId, columnId, fromIndex, toIndex) {
         set((state) =>
-          updateBoard(state, threadId, (board) => ({
+          updateBoard(state, projectId, (board) => ({
             ...board,
             columns: board.columns.map((col) => {
               if (col.id !== columnId) return col;
@@ -246,7 +246,7 @@ export const useKanbanStore = create<KanbanStoreState>()(
       },
     }),
     {
-      name: "t3code:kanban:v1",
+      name: "t3code:kanban:v2",
       storage: createJSONStorage(() => localStorage),
     },
   ),

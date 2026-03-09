@@ -18,7 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { memo, useCallback, useRef, useState } from "react";
-import type { ThreadId } from "@t3tools/contracts";
+import type { ProjectId } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
 import {
   EMPTY_KANBAN_BOARD_SNAPSHOT,
@@ -55,13 +55,13 @@ function columnColor(column: KanbanColumn): string {
 const EditCardDialog = memo(function EditCardDialog({
   card,
   columnId,
-  threadId,
+  projectId,
   open,
   onClose,
 }: {
   card: KanbanCard;
   columnId: string;
-  threadId: ThreadId;
+  projectId: ProjectId;
   open: boolean;
   onClose: () => void;
 }) {
@@ -74,13 +74,13 @@ const EditCardDialog = memo(function EditCardDialog({
     if (!trimmed) return;
     const descTrimmed = desc.trim();
     updateCard(
-      threadId,
+      projectId,
       columnId,
       card.id,
       descTrimmed ? { title: trimmed, description: descTrimmed } : { title: trimmed },
     );
     onClose();
-  }, [title, desc, updateCard, threadId, columnId, card.id, onClose]);
+  }, [title, desc, updateCard, projectId, columnId, card.id, onClose]);
 
   return (
     <Dialog
@@ -144,11 +144,11 @@ const EditCardDialog = memo(function EditCardDialog({
 interface CardItemProps {
   card: KanbanCard;
   columnId: string;
-  threadId: ThreadId;
+  projectId: ProjectId;
   isDragging?: boolean;
 }
 
-const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }: CardItemProps) {
+const CardItem = memo(function CardItem({ card, columnId, projectId, isDragging }: CardItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isSorting } = useSortable({
     id: card.id,
     data: { type: "card", card, columnId },
@@ -199,7 +199,7 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
           </button>
           <button
             type="button"
-            onClick={() => deleteCard(threadId, columnId, card.id)}
+            onClick={() => deleteCard(projectId, columnId, card.id)}
             className="rounded p-1 text-muted-foreground/60 hover:text-destructive"
             aria-label="Delete card"
           >
@@ -211,7 +211,7 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
       <EditCardDialog
         card={card}
         columnId={columnId}
-        threadId={threadId}
+        projectId={projectId}
         open={editOpen}
         onClose={() => setEditOpen(false)}
       />
@@ -241,12 +241,12 @@ const CardGhost = memo(function CardGhost({ card }: { card: KanbanCard }) {
 
 const AddCardDialog = memo(function AddCardDialog({
   columnId,
-  threadId,
+  projectId,
   open,
   onClose,
 }: {
   columnId: string;
-  threadId: ThreadId;
+  projectId: ProjectId;
   open: boolean;
   onClose: () => void;
 }) {
@@ -258,11 +258,11 @@ const AddCardDialog = memo(function AddCardDialog({
     const trimmed = title.trim();
     if (!trimmed) return;
     const descTrimmed = desc.trim();
-    addCard(threadId, columnId, trimmed, descTrimmed || undefined);
+    addCard(projectId, columnId, trimmed, descTrimmed || undefined);
     setTitle("");
     setDesc("");
     onClose();
-  }, [title, desc, addCard, threadId, columnId, onClose]);
+  }, [title, desc, addCard, projectId, columnId, onClose]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -314,12 +314,12 @@ const AddCardDialog = memo(function AddCardDialog({
 
 const EditColumnDialog = memo(function EditColumnDialog({
   column,
-  threadId,
+  projectId,
   open,
   onClose,
 }: {
   column: KanbanColumn;
-  threadId: ThreadId;
+  projectId: ProjectId;
   open: boolean;
   onClose: () => void;
 }) {
@@ -330,9 +330,9 @@ const EditColumnDialog = memo(function EditColumnDialog({
   const save = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    updateColumn(threadId, column.id, color ? { title: trimmed, color } : { title: trimmed });
+    updateColumn(projectId, column.id, color ? { title: trimmed, color } : { title: trimmed });
     onClose();
-  }, [title, color, updateColumn, threadId, column.id, onClose]);
+  }, [title, color, updateColumn, projectId, column.id, onClose]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -374,11 +374,11 @@ const EditColumnDialog = memo(function EditColumnDialog({
 // ─── Add column dialog ─────────────────────────────────────────────────────────
 
 const AddColumnDialog = memo(function AddColumnDialog({
-  threadId,
+  projectId,
   open,
   onClose,
 }: {
-  threadId: ThreadId;
+  projectId: ProjectId;
   open: boolean;
   onClose: () => void;
 }) {
@@ -389,11 +389,11 @@ const AddColumnDialog = memo(function AddColumnDialog({
   const submit = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    addColumn(threadId, trimmed, color);
+    addColumn(projectId, trimmed, color);
     setTitle("");
     setColor(QUICK_PICKS[3]);
     onClose();
-  }, [title, color, addColumn, threadId, onClose]);
+  }, [title, color, addColumn, projectId, onClose]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -436,11 +436,11 @@ const AddColumnDialog = memo(function AddColumnDialog({
 
 const Column = memo(function Column({
   column,
-  threadId,
+  projectId,
   activeCardId,
 }: {
   column: KanbanColumn;
-  threadId: ThreadId;
+  projectId: ProjectId;
   activeCardId: string | null;
 }) {
   const [addingCard, setAddingCard] = useState(false);
@@ -490,7 +490,7 @@ const Column = memo(function Column({
               <>
                 <button
                   type="button"
-                  onClick={() => deleteColumn(threadId, column.id)}
+                  onClick={() => deleteColumn(projectId, column.id)}
                   className="rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
                 >
                   Delete
@@ -531,7 +531,7 @@ const Column = memo(function Column({
                 key={card.id}
                 card={card}
                 columnId={column.id}
-                threadId={threadId}
+                projectId={projectId}
                 isDragging={activeCardId === card.id}
               />
             ))}
@@ -551,14 +551,14 @@ const Column = memo(function Column({
 
     <AddCardDialog
       columnId={column.id}
-      threadId={threadId}
+      projectId={projectId}
       open={addingCard}
       onClose={() => setAddingCard(false)}
     />
 
     <EditColumnDialog
       column={column}
-      threadId={threadId}
+      projectId={projectId}
       open={editDialogOpen}
       onClose={() => setEditDialogOpen(false)}
     />
@@ -568,8 +568,8 @@ const Column = memo(function Column({
 
 // ─── Board ─────────────────────────────────────────────────────────────────────
 
-export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
-  const storedBoard = useKanbanStore((s) => s.boardsByThreadId[threadId]);
+export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
+  const storedBoard = useKanbanStore((s) => s.boardsByProjectId[projectId]);
   const board = storedBoard ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
   const moveCard = useKanbanStore((s) => s.moveCard);
 
@@ -607,7 +607,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
         toColumnId = overData.columnId as string;
         const toColumn = useKanbanStore
           .getState()
-          .boardsByThreadId[threadId]?.columns.find((c) => c.id === toColumnId);
+          .boardsByProjectId[projectId]?.columns.find((c) => c.id === toColumnId);
         if (!toColumn) return;
         toIndex = toColumn.cards.findIndex((c) => c.id === (over.id as string));
         if (toIndex === -1) toIndex = toColumn.cards.length;
@@ -615,17 +615,17 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
         toColumnId = overData.columnId as string;
         const toColumn = useKanbanStore
           .getState()
-          .boardsByThreadId[threadId]?.columns.find((c) => c.id === toColumnId);
+          .boardsByProjectId[projectId]?.columns.find((c) => c.id === toColumnId);
         toIndex = toColumn?.cards.length ?? 0;
       } else {
         return;
       }
 
       if (fromColumnId === toColumnId) return;
-      moveCard(threadId, cardId, fromColumnId, toColumnId, toIndex);
+      moveCard(projectId, cardId, fromColumnId, toColumnId, toIndex);
       activeCardColumnRef.current = toColumnId;
     },
-    [moveCard, threadId],
+    [moveCard, projectId],
   );
 
   const onDragEnd = useCallback(
@@ -647,7 +647,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
 
       const cardId = active.id as string;
       const currentBoard =
-        useKanbanStore.getState().boardsByThreadId[threadId] ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
+        useKanbanStore.getState().boardsByProjectId[projectId] ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
       const col = currentBoard.columns.find((c) => c.id === fromColumnId);
       if (!col) return;
 
@@ -655,9 +655,9 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
       const toIndex = col.cards.findIndex((c) => c.id === (over.id as string));
       if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
 
-      moveCard(threadId, cardId, fromColumnId, toColumnId, toIndex);
+      moveCard(projectId, cardId, fromColumnId, toColumnId, toIndex);
     },
-    [activeCard, moveCard, threadId],
+    [activeCard, moveCard, projectId],
   );
 
   return (
@@ -675,7 +675,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
             <Column
               key={column.id}
               column={column}
-              threadId={threadId}
+              projectId={projectId}
               activeCardId={activeCard?.id ?? null}
             />
           ))}
@@ -695,7 +695,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
     </DndContext>
 
     <AddColumnDialog
-      threadId={threadId}
+      projectId={projectId}
       open={addingColumn}
       onClose={() => setAddingColumn(false)}
     />

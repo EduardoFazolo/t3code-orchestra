@@ -187,6 +187,9 @@ function ChatThreadRouteView() {
   });
   const search = Route.useSearch();
   const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
+  const projectId = useStore(
+    (store) => store.threads.find((t) => t.id === threadId)?.projectId,
+  );
   const draftThreadExists = useComposerDraftStore(
     (store) => Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
@@ -236,9 +239,9 @@ function ChatThreadRouteView() {
             <WorkspaceTabBar activeTab={activeTab} onTabChange={setActiveTab} />
             {activeTab === "chat" ? (
               <ChatView key={threadId} threadId={threadId} />
-            ) : (
-              <KanbanBoard threadId={threadId} />
-            )}
+            ) : projectId ? (
+              <KanbanBoard projectId={projectId} />
+            ) : null}
           </div>
         </SidebarInset>
         {activeTab === "chat" && (
@@ -259,9 +262,9 @@ function ChatThreadRouteView() {
           <WorkspaceTabBar activeTab={activeTab} onTabChange={setActiveTab} />
           {activeTab === "chat" ? (
             <ChatView key={threadId} threadId={threadId} />
-          ) : (
-            <KanbanBoard threadId={threadId} />
-          )}
+          ) : projectId ? (
+            <KanbanBoard projectId={projectId} />
+          ) : null}
         </div>
       </SidebarInset>
       {activeTab === "chat" && (
