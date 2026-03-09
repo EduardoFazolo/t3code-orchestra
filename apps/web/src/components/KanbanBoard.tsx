@@ -16,11 +16,19 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, PencilIcon, PlusIcon, Trash2Icon, XIcon, CheckIcon } from "lucide-react";
+import {
+  CheckIcon,
+  GripVertical,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
 import { memo, useCallback, useRef, useState } from "react";
 import type { ThreadId } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
 import { getDefaultBoard, useKanbanStore, type KanbanCard, type KanbanColumn } from "../kanbanStore";
+import { KanbanColorPicker, QUICK_PICKS } from "./KanbanColorPicker";
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -139,7 +147,6 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
         </div>
         <div
           className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-          // Prevent drag from triggering when clicking action buttons
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -164,7 +171,7 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
   );
 });
 
-// ─── Card ghost for DragOverlay ────────────────────────────────────────────────
+// ─── Card ghost ────────────────────────────────────────────────────────────────
 
 const CardGhost = memo(function CardGhost({ card }: { card: KanbanCard }) {
   return (
@@ -184,13 +191,15 @@ const CardGhost = memo(function CardGhost({ card }: { card: KanbanCard }) {
 
 // ─── Add card form ─────────────────────────────────────────────────────────────
 
-interface AddCardFormProps {
+const AddCardForm = memo(function AddCardForm({
+  columnId,
+  threadId,
+  onDone,
+}: {
   columnId: string;
   threadId: ThreadId;
   onDone: () => void;
-}
-
-const AddCardForm = memo(function AddCardForm({ columnId, threadId, onDone }: AddCardFormProps) {
+}) {
   const [title, setTitle] = useState("");
   const addCard = useKanbanStore((s) => s.addCard);
 
@@ -240,6 +249,128 @@ const AddCardForm = memo(function AddCardForm({ columnId, threadId, onDone }: Ad
   );
 });
 
+// ─── Column header editor ──────────────────────────────────────────────────────
+
+const ColumnHeaderEditor = memo(function ColumnHeaderEditor({
+  column,
+  threadId,
+  onDone,
+}: {
+  column: KanbanColumn;
+  threadId: ThreadId;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = useState(column.title);
+  const [color, setColor] = useState<string | undefined>(column.color);
+  const updateColumn = useKanbanStore((s) => s.updateColumn);
+
+  const save = useCallback(() => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    updateColumn(threadId, column.id, color ? { title: trimmed, color } : { title: trimmed });
+    onDone();
+  }, [title, color, updateColumn, threadId, column.id, onDone]);
+
+  return (
+    <div className="space-y-2.5">
+      <input
+        autoFocus
+        className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-ring"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") onDone();
+        }}
+        placeholder="Column name"
+      />
+      <KanbanColorPicker value={color} onChange={setColor} />
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={save}
+          className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <CheckIcon className="size-3" />
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <XIcon className="size-3" />
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// ─── Add column form ───────────────────────────────────────────────────────────
+
+const AddColumnForm = memo(function AddColumnForm({
+  threadId,
+  onDone,
+}: {
+  threadId: ThreadId;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [color, setColor] = useState<string | undefined>(QUICK_PICKS[3]); // blue default
+  const addColumn = useKanbanStore((s) => s.addColumn);
+
+  const submit = useCallback(() => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      onDone();
+      return;
+    }
+    addColumn(threadId, trimmed, color);
+    onDone();
+  }, [title, color, addColumn, threadId, onDone]);
+
+  return (
+    <div className="flex w-64 shrink-0 flex-col rounded-xl border border-dashed border-border bg-muted/10 p-3">
+      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        New column
+      </p>
+      <div className="space-y-2.5">
+        <input
+          autoFocus
+          className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-ring"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") onDone();
+          }}
+          placeholder="Column name"
+        />
+        <KanbanColorPicker value={color} onChange={setColor} />
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={submit}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <CheckIcon className="size-3" />
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <XIcon className="size-3" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // ─── Column ────────────────────────────────────────────────────────────────────
 
 interface ColumnProps {
@@ -250,82 +381,141 @@ interface ColumnProps {
 
 const Column = memo(function Column({ column, threadId, activeCardId }: ColumnProps) {
   const [addingCard, setAddingCard] = useState(false);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const cardIds = column.cards.map((c) => c.id);
+  const deleteColumn = useKanbanStore((s) => s.deleteColumn);
 
-  // Make the column body a droppable target (for empty columns and hovering over the column area)
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: { type: "column", columnId: column.id },
   });
 
+  const accentColor = column.color ?? "#64748b";
+
   return (
-    <div className="flex w-64 shrink-0 flex-col rounded-xl border border-border bg-muted/30 p-3">
-      {/* Column header */}
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {column.title}
-        </h3>
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-          {column.cards.length}
-        </span>
+    <div className="flex w-64 shrink-0 flex-col rounded-xl border border-border bg-muted/30 overflow-hidden">
+      {/* Color accent bar */}
+      <div className="h-1 w-full shrink-0" style={{ backgroundColor: accentColor }} />
+
+      <div className="flex flex-1 flex-col p-3">
+        {/* Column header */}
+        {editingHeader ? (
+          <div className="mb-3">
+            <ColumnHeaderEditor
+              column={column}
+              threadId={threadId}
+              onDone={() => setEditingHeader(false)}
+            />
+          </div>
+        ) : (
+          <div className="group mb-3 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {/* Color dot */}
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: accentColor }}
+              />
+              <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {column.title}
+              </h3>
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {column.cards.length}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => setEditingHeader(true)}
+                className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+                aria-label="Edit column"
+              >
+                <PencilIcon className="size-3" />
+              </button>
+              {confirmDelete ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => deleteColumn(threadId, column.id)}
+                    className="rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
+                  aria-label="Delete column"
+                >
+                  <Trash2Icon className="size-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Cards */}
+        <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+          <div
+            ref={setNodeRef}
+            className={cn(
+              "flex flex-1 flex-col gap-2 overflow-y-auto rounded-lg transition-colors",
+              isOver && "bg-muted/40",
+              column.cards.length === 0 && "min-h-16",
+            )}
+          >
+            {column.cards.map((card) => (
+              <CardItem
+                key={card.id}
+                card={card}
+                columnId={column.id}
+                threadId={threadId}
+                isDragging={activeCardId === card.id}
+              />
+            ))}
+            {addingCard && (
+              <AddCardForm
+                columnId={column.id}
+                threadId={threadId}
+                onDone={() => setAddingCard(false)}
+              />
+            )}
+          </div>
+        </SortableContext>
+
+        {/* Add card */}
+        {!addingCard && (
+          <button
+            type="button"
+            onClick={() => setAddingCard(true)}
+            className="mt-3 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PlusIcon className="size-3.5" />
+            Add card
+          </button>
+        )}
       </div>
-
-      {/* Cards */}
-      <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setNodeRef}
-          className={cn(
-            "flex flex-1 flex-col gap-2 overflow-y-auto rounded-lg transition-colors",
-            isOver && "bg-muted/40",
-            column.cards.length === 0 && "min-h-16",
-          )}
-        >
-          {column.cards.map((card) => (
-            <CardItem
-              key={card.id}
-              card={card}
-              columnId={column.id}
-              threadId={threadId}
-              isDragging={activeCardId === card.id}
-            />
-          ))}
-          {addingCard && (
-            <AddCardForm
-              columnId={column.id}
-              threadId={threadId}
-              onDone={() => setAddingCard(false)}
-            />
-          )}
-        </div>
-      </SortableContext>
-
-      {/* Add card button */}
-      {!addingCard && (
-        <button
-          type="button"
-          onClick={() => setAddingCard(true)}
-          className="mt-3 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <PlusIcon className="size-3.5" />
-          Add card
-        </button>
-      )}
     </div>
   );
 });
 
 // ─── Board ─────────────────────────────────────────────────────────────────────
 
-interface KanbanBoardProps {
-  threadId: ThreadId;
-}
-
-export default function KanbanBoard({ threadId }: KanbanBoardProps) {
+export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
   const board = useKanbanStore((s) => s.boardsByThreadId[threadId] ?? getDefaultBoard());
   const moveCard = useKanbanStore((s) => s.moveCard);
 
   const [activeCard, setActiveCard] = useState<KanbanCard | null>(null);
-  // Track the card's current column during drag via ref (active.data.current is stale after cross-column moves)
+  const [addingColumn, setAddingColumn] = useState(false);
   const activeCardColumnRef = useRef<string | null>(null);
 
   const sensors = useSensors(
@@ -344,7 +534,6 @@ export default function KanbanBoard({ threadId }: KanbanBoardProps) {
     (event: DragOverEvent) => {
       const { active, over } = event;
       if (!over || !activeCardColumnRef.current) return;
-
       const activeData = active.data.current;
       if (activeData?.type !== "card") return;
 
@@ -373,8 +562,7 @@ export default function KanbanBoard({ threadId }: KanbanBoardProps) {
         return;
       }
 
-      if (fromColumnId === toColumnId) return; // Same column: SortableContext handles reorder
-
+      if (fromColumnId === toColumnId) return;
       moveCard(threadId, cardId, fromColumnId, toColumnId, toIndex);
       activeCardColumnRef.current = toColumnId;
     },
@@ -387,7 +575,6 @@ export default function KanbanBoard({ threadId }: KanbanBoardProps) {
       setActiveCard(null);
       activeCardColumnRef.current = null;
 
-      // Handle same-column reorder (cross-column is already committed in onDragOver)
       const { active, over } = event;
       if (!over || !prevCard) return;
 
@@ -397,16 +584,16 @@ export default function KanbanBoard({ threadId }: KanbanBoardProps) {
 
       const fromColumnId = activeData.columnId as string;
       const toColumnId = overData.columnId as string;
-      if (fromColumnId !== toColumnId) return; // Already handled in onDragOver
+      if (fromColumnId !== toColumnId) return;
 
       const cardId = active.id as string;
       const currentBoard =
         useKanbanStore.getState().boardsByThreadId[threadId] ?? getDefaultBoard();
-      const column = currentBoard.columns.find((c) => c.id === fromColumnId);
-      if (!column) return;
+      const col = currentBoard.columns.find((c) => c.id === fromColumnId);
+      if (!col) return;
 
-      const fromIndex = column.cards.findIndex((c) => c.id === cardId);
-      const toIndex = column.cards.findIndex((c) => c.id === (over.id as string));
+      const fromIndex = col.cards.findIndex((c) => c.id === cardId);
+      const toIndex = col.cards.findIndex((c) => c.id === (over.id as string));
       if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
 
       moveCard(threadId, cardId, fromColumnId, toColumnId, toIndex);
@@ -432,6 +619,20 @@ export default function KanbanBoard({ threadId }: KanbanBoardProps) {
               activeCardId={activeCard?.id ?? null}
             />
           ))}
+
+          {/* Add column */}
+          {addingColumn ? (
+            <AddColumnForm threadId={threadId} onDone={() => setAddingColumn(false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingColumn(true)}
+              className="flex h-10 w-48 shrink-0 items-center gap-2 rounded-xl border border-dashed border-border px-4 text-sm text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
+            >
+              <PlusIcon className="size-4" />
+              Add column
+            </button>
+          )}
         </div>
       </div>
 

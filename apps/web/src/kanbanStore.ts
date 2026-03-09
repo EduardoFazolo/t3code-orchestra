@@ -10,6 +10,7 @@ export interface KanbanCard {
 export interface KanbanColumn {
   id: string;
   title: string;
+  color?: string;
   cards: KanbanCard[];
 }
 
@@ -20,10 +21,10 @@ export interface KanbanBoardState {
 export type KanbanBoardsByThreadId = Record<string, KanbanBoardState>;
 
 const DEFAULT_COLUMNS: KanbanColumn[] = [
-  { id: "todo", title: "To-do", cards: [] },
-  { id: "in-progress", title: "In Progress", cards: [] },
-  { id: "review", title: "Review", cards: [] },
-  { id: "done", title: "Done", cards: [] },
+  { id: "todo", title: "To-do", color: "#64748b", cards: [] },
+  { id: "in-progress", title: "In Progress", color: "#3b82f6", cards: [] },
+  { id: "review", title: "Review", color: "#f59e0b", cards: [] },
+  { id: "done", title: "Done", color: "#22c55e", cards: [] },
 ];
 
 export function getDefaultBoard(): KanbanBoardState {
@@ -32,9 +33,22 @@ export function getDefaultBoard(): KanbanBoardState {
   };
 }
 
+function newId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 interface KanbanStoreState {
   boardsByThreadId: KanbanBoardsByThreadId;
   getBoardForThread: (threadId: string) => KanbanBoardState;
+  // Column management
+  addColumn: (threadId: string, title: string, color?: string) => void;
+  updateColumn: (
+    threadId: string,
+    columnId: string,
+    updates: Partial<Pick<KanbanColumn, "title" | "color">>,
+  ) => void;
+  deleteColumn: (threadId: string, columnId: string) => void;
+  // Card management
   addCard: (threadId: string, columnId: string, title: string, description?: string) => void;
   updateCard: (
     threadId: string,
@@ -51,10 +65,6 @@ interface KanbanStoreState {
     toIndex: number,
   ) => void;
   reorderCard: (threadId: string, columnId: string, fromIndex: number, toIndex: number) => void;
-}
-
-function newCardId() {
-  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function getOrCreateBoard(
@@ -87,10 +97,42 @@ export const useKanbanStore = create<KanbanStoreState>()(
         return getOrCreateBoard(get().boardsByThreadId, threadId);
       },
 
+      addColumn(threadId, title, color) {
+        const col: KanbanColumn = color
+          ? { id: newId("col"), title, color, cards: [] }
+          : { id: newId("col"), title, cards: [] };
+        set((state) =>
+          updateBoard(state, threadId, (board) => ({
+            ...board,
+            columns: [...board.columns, col],
+          })),
+        );
+      },
+
+      updateColumn(threadId, columnId, updates) {
+        set((state) =>
+          updateBoard(state, threadId, (board) => ({
+            ...board,
+            columns: board.columns.map((col) =>
+              col.id === columnId ? { ...col, ...updates } : col,
+            ),
+          })),
+        );
+      },
+
+      deleteColumn(threadId, columnId) {
+        set((state) =>
+          updateBoard(state, threadId, (board) => ({
+            ...board,
+            columns: board.columns.filter((col) => col.id !== columnId),
+          })),
+        );
+      },
+
       addCard(threadId, columnId, title, description) {
         const card: KanbanCard = description
-          ? { id: newCardId(), title, description }
-          : { id: newCardId(), title };
+          ? { id: newId("card"), title, description }
+          : { id: newId("card"), title };
         set((state) =>
           updateBoard(state, threadId, (board) => ({
             ...board,
