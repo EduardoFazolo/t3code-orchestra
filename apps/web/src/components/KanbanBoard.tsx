@@ -21,7 +21,7 @@ import { memo, useCallback, useRef, useState } from "react";
 import type { ThreadId } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
 import {
-  getDefaultBoard,
+  EMPTY_KANBAN_BOARD_SNAPSHOT,
   useKanbanStore,
   type KanbanCard,
   type KanbanColumn,
@@ -569,7 +569,8 @@ const Column = memo(function Column({
 // ─── Board ─────────────────────────────────────────────────────────────────────
 
 export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
-  const board = useKanbanStore((s) => s.boardsByThreadId[threadId] ?? getDefaultBoard());
+  const storedBoard = useKanbanStore((s) => s.boardsByThreadId[threadId]);
+  const board = storedBoard ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
   const moveCard = useKanbanStore((s) => s.moveCard);
 
   const [activeCard, setActiveCard] = useState<KanbanCard | null>(null);
@@ -646,7 +647,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
 
       const cardId = active.id as string;
       const currentBoard =
-        useKanbanStore.getState().boardsByThreadId[threadId] ?? getDefaultBoard();
+        useKanbanStore.getState().boardsByThreadId[threadId] ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
       const col = currentBoard.columns.find((c) => c.id === fromColumnId);
       if (!col) return;
 

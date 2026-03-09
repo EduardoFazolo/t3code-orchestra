@@ -27,9 +27,34 @@ const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: "done", title: "Done", color: "#22c55e", cards: [] },
 ];
 
+function cloneDefaultColumn(column: KanbanColumn): KanbanColumn {
+  return column.color
+    ? {
+        id: column.id,
+        title: column.title,
+        color: column.color,
+        cards: [],
+      }
+    : {
+        id: column.id,
+        title: column.title,
+        cards: [],
+      };
+}
+
+export const EMPTY_KANBAN_BOARD_SNAPSHOT: KanbanBoardState = {
+  columns: DEFAULT_COLUMNS.map(cloneDefaultColumn),
+};
+for (const column of EMPTY_KANBAN_BOARD_SNAPSHOT.columns) {
+  Object.freeze(column.cards);
+  Object.freeze(column);
+}
+Object.freeze(EMPTY_KANBAN_BOARD_SNAPSHOT.columns);
+Object.freeze(EMPTY_KANBAN_BOARD_SNAPSHOT);
+
 export function getDefaultBoard(): KanbanBoardState {
   return {
-    columns: DEFAULT_COLUMNS.map((col) => ({ ...col, cards: [] })),
+    columns: DEFAULT_COLUMNS.map(cloneDefaultColumn),
   };
 }
 
