@@ -1,14 +1,16 @@
 import { ThreadId } from "@t3tools/contracts";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, type ReactNode, useCallback, useEffect } from "react";
+import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
 
 import ChatView from "../components/ChatView";
+import KanbanBoard from "../components/KanbanBoard";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../store";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { cn } from "~/lib/utils";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -148,8 +150,37 @@ const DiffPanelInlineSidebar = (props: {
   );
 };
 
+type WorkspaceTab = "chat" | "board";
+
+const WorkspaceTabBar = ({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: WorkspaceTab;
+  onTabChange: (tab: WorkspaceTab) => void;
+}) => (
+  <div className="flex shrink-0 items-center gap-1 border-b border-border bg-background px-3 sm:px-5">
+    {(["chat", "board"] as const).map((tab) => (
+      <button
+        key={tab}
+        type="button"
+        onClick={() => onTabChange(tab)}
+        className={cn(
+          "relative px-3 py-2.5 text-sm font-medium transition-colors",
+          activeTab === tab
+            ? "text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {tab === "chat" ? "Chat" : "Board"}
+      </button>
+    ))}
+  </div>
+);
+
 function ChatThreadRouteView() {
   const threadsHydrated = useStore((store) => store.threadsHydrated);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("chat");
   const navigate = useNavigate();
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
@@ -201,9 +232,22 @@ function ChatThreadRouteView() {
     return (
       <>
         <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ChatView key={threadId} threadId={threadId} />
+          <div className="flex h-full min-h-0 flex-col">
+            <WorkspaceTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+            {activeTab === "chat" ? (
+              <ChatView key={threadId} threadId={threadId} />
+            ) : (
+              <KanbanBoard threadId={threadId} />
+            )}
+          </div>
         </SidebarInset>
-        <DiffPanelInlineSidebar diffOpen={diffOpen} onCloseDiff={closeDiff} onOpenDiff={openDiff} />
+        {activeTab === "chat" && (
+          <DiffPanelInlineSidebar
+            diffOpen={diffOpen}
+            onCloseDiff={closeDiff}
+            onOpenDiff={openDiff}
+          />
+        )}
       </>
     );
   }
@@ -211,13 +255,22 @@ function ChatThreadRouteView() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ChatView key={threadId} threadId={threadId} />
+        <div className="flex h-full min-h-0 flex-col">
+          <WorkspaceTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+          {activeTab === "chat" ? (
+            <ChatView key={threadId} threadId={threadId} />
+          ) : (
+            <KanbanBoard threadId={threadId} />
+          )}
+        </div>
       </SidebarInset>
-      <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
-        <Suspense fallback={<DiffLoadingFallback inline={false} />}>
-          <DiffPanel mode="sheet" />
-        </Suspense>
-      </DiffPanelSheet>
+      {activeTab === "chat" && (
+        <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
+          <Suspense fallback={<DiffLoadingFallback inline={false} />}>
+            <DiffPanel mode="sheet" />
+          </Suspense>
+        </DiffPanelSheet>
+      )}
     </>
   );
 }
