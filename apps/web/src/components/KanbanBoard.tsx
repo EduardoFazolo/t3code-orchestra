@@ -27,8 +27,124 @@ import {
 import { memo, useCallback, useRef, useState } from "react";
 import type { ThreadId } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
-import { getDefaultBoard, useKanbanStore, type KanbanCard, type KanbanColumn } from "../kanbanStore";
+import {
+  getDefaultBoard,
+  useKanbanStore,
+  type KanbanCard,
+  type KanbanColumn,
+} from "../kanbanStore";
 import { KanbanColorPicker, QUICK_PICKS } from "./KanbanColorPicker";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+
+// ─── Default column colors (fallback for boards created before colors were added)
+
+const DEFAULT_COLUMN_COLORS: Record<string, string> = {
+  todo: "#64748b",
+  "in-progress": "#3b82f6",
+  review: "#f59e0b",
+  done: "#22c55e",
+};
+
+function columnColor(column: KanbanColumn): string {
+  return column.color ?? DEFAULT_COLUMN_COLORS[column.id] ?? "#64748b";
+}
+
+// ─── Edit card dialog ──────────────────────────────────────────────────────────
+
+const EditCardDialog = memo(function EditCardDialog({
+  card,
+  columnId,
+  threadId,
+  open,
+  onClose,
+}: {
+  card: KanbanCard;
+  columnId: string;
+  threadId: ThreadId;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(card.title);
+  const [desc, setDesc] = useState(card.description ?? "");
+  const updateCard = useKanbanStore((s) => s.updateCard);
+
+  const save = useCallback(() => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const descTrimmed = desc.trim();
+    updateCard(
+      threadId,
+      columnId,
+      card.id,
+      descTrimmed ? { title: trimmed, description: descTrimmed } : { title: trimmed },
+    );
+    onClose();
+  }, [title, desc, updateCard, threadId, columnId, card.id, onClose]);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogPopup showCloseButton={false} className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit card</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+              <input
+                autoFocus
+                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") save();
+                  if (e.key === "Escape") onClose();
+                }}
+                placeholder="Card title"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Description
+              </label>
+              <textarea
+                className="w-full resize-none rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground outline-none focus:border-ring placeholder:text-muted-foreground/40"
+                rows={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") onClose();
+                }}
+                placeholder="Optional description…"
+              />
+            </div>
+          </div>
+        </DialogPanel>
+        <DialogFooter variant="bare">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={save}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+});
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -44,11 +160,7 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
     id: card.id,
     data: { type: "card", card, columnId },
   });
-
-  const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(card.title);
-  const [editDesc, setEditDesc] = useState(card.description ?? "");
-  const updateCard = useKanbanStore((s) => s.updateCard);
+  const [editOpen, setEditOpen] = useState(false);
   const deleteCard = useKanbanStore((s) => s.deleteCard);
 
   const style = {
@@ -56,118 +168,63 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
     transition: isSorting ? transition : undefined,
   };
 
-  const saveEdit = useCallback(() => {
-    const trimmed = editTitle.trim();
-    if (!trimmed) return;
-    const descTrimmed = editDesc.trim();
-    updateCard(
-      threadId,
-      columnId,
-      card.id,
-      descTrimmed ? { title: trimmed, description: descTrimmed } : { title: trimmed },
-    );
-    setEditing(false);
-  }, [editTitle, editDesc, updateCard, threadId, columnId, card.id]);
-
-  const cancelEdit = useCallback(() => {
-    setEditTitle(card.title);
-    setEditDesc(card.description ?? "");
-    setEditing(false);
-  }, [card.title, card.description]);
-
-  if (editing) {
-    return (
+  return (
+    <>
       <div
         ref={setNodeRef}
         style={style}
-        className="rounded-lg border border-ring/40 bg-card p-2.5 shadow-sm"
+        {...attributes}
+        className={cn(
+          "group flex rounded-lg border border-border bg-card shadow-sm transition-shadow hover:shadow-md hover:border-border/80",
+          isDragging && "opacity-40",
+        )}
       >
-        <input
-          autoFocus
-          className="w-full rounded bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/50"
-          value={editTitle}
-          onChange={(e) => setEditTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") saveEdit();
-            if (e.key === "Escape") cancelEdit();
-          }}
-          placeholder="Card title"
-        />
-        <textarea
-          className="mt-1.5 w-full resize-none rounded bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/40"
-          rows={2}
-          value={editDesc}
-          onChange={(e) => setEditDesc(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") cancelEdit();
-          }}
-          placeholder="Description (optional)"
-        />
-        <div className="mt-2 flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={saveEdit}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <CheckIcon className="size-3" />
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={cancelEdit}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <XIcon className="size-3" />
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={cn(
-        "group relative rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm transition-shadow",
-        "cursor-grab active:cursor-grabbing hover:shadow-md hover:border-border/80",
-        isDragging && "opacity-40",
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/30 transition-opacity group-hover:text-muted-foreground/60" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{card.title}</p>
-          {card.description && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{card.description}</p>
-          )}
-        </div>
+        {/* Drag zone — full card height, only this area activates drag */}
         <div
-          className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-          onPointerDown={(e) => e.stopPropagation()}
+          {...listeners}
+          className="flex cursor-grab items-center self-stretch px-2 active:cursor-grabbing"
+          aria-label="Drag card"
         >
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
-            aria-label="Edit card"
-          >
-            <PencilIcon className="size-3" />
-          </button>
-          <button
-            type="button"
-            onClick={() => deleteCard(threadId, columnId, card.id)}
-            className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
-            aria-label="Delete card"
-          >
-            <Trash2Icon className="size-3" />
-          </button>
+          <GripVertical className="size-3.5 text-muted-foreground/20 transition-colors group-hover:text-muted-foreground/50" />
+        </div>
+
+        {/* Card content — no drag listeners, buttons work normally */}
+        <div className="flex min-w-0 flex-1 items-start gap-2 py-2.5 pr-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">{card.title}</p>
+            {card.description && (
+              <p className="mt-0.5 text-xs text-muted-foreground">{card.description}</p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+              aria-label="Edit card"
+            >
+              <PencilIcon className="size-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteCard(threadId, columnId, card.id)}
+              className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
+              aria-label="Delete card"
+            >
+              <Trash2Icon className="size-3" />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      <EditCardDialog
+        card={card}
+        columnId={columnId}
+        threadId={threadId}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
+    </>
   );
 });
 
@@ -175,15 +232,15 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
 
 const CardGhost = memo(function CardGhost({ card }: { card: KanbanCard }) {
   return (
-    <div className="rotate-1 rounded-lg border border-ring/60 bg-card px-3 py-2.5 shadow-xl">
-      <div className="flex items-start gap-2">
-        <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{card.title}</p>
-          {card.description && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{card.description}</p>
-          )}
-        </div>
+    <div className="flex rotate-1 rounded-lg border border-ring/60 bg-card shadow-xl">
+      <div className="flex items-center self-stretch px-2">
+        <GripVertical className="size-3.5 text-muted-foreground/50" />
+      </div>
+      <div className="min-w-0 flex-1 py-2.5 pr-3">
+        <p className="text-sm font-medium text-foreground">{card.title}</p>
+        {card.description && (
+          <p className="mt-0.5 text-xs text-muted-foreground">{card.description}</p>
+        )}
       </div>
     </div>
   );
@@ -249,139 +306,141 @@ const AddCardForm = memo(function AddCardForm({
   );
 });
 
-// ─── Column header editor ──────────────────────────────────────────────────────
+// ─── Edit column dialog ────────────────────────────────────────────────────────
 
-const ColumnHeaderEditor = memo(function ColumnHeaderEditor({
+const EditColumnDialog = memo(function EditColumnDialog({
   column,
   threadId,
-  onDone,
+  open,
+  onClose,
 }: {
   column: KanbanColumn;
   threadId: ThreadId;
-  onDone: () => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   const [title, setTitle] = useState(column.title);
-  const [color, setColor] = useState<string | undefined>(column.color);
+  const [color, setColor] = useState<string | undefined>(columnColor(column));
   const updateColumn = useKanbanStore((s) => s.updateColumn);
 
   const save = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed) return;
     updateColumn(threadId, column.id, color ? { title: trimmed, color } : { title: trimmed });
-    onDone();
-  }, [title, color, updateColumn, threadId, column.id, onDone]);
+    onClose();
+  }, [title, color, updateColumn, threadId, column.id, onClose]);
 
   return (
-    <div className="space-y-2.5">
-      <input
-        autoFocus
-        className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-ring"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") save();
-          if (e.key === "Escape") onDone();
-        }}
-        placeholder="Column name"
-      />
-      <KanbanColorPicker value={color} onChange={setColor} />
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={save}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <CheckIcon className="size-3" />
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <XIcon className="size-3" />
-          Cancel
-        </button>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogPopup showCloseButton={false} className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit column</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+              <input
+                autoFocus
+                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") save();
+                  if (e.key === "Escape") onClose();
+                }}
+                placeholder="Column name"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">Color</label>
+              <KanbanColorPicker value={color} onChange={setColor} />
+            </div>
+          </div>
+        </DialogPanel>
+        <DialogFooter variant="bare">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={save}>Save</Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 });
 
-// ─── Add column form ───────────────────────────────────────────────────────────
+// ─── Add column dialog ─────────────────────────────────────────────────────────
 
-const AddColumnForm = memo(function AddColumnForm({
+const AddColumnDialog = memo(function AddColumnDialog({
   threadId,
-  onDone,
+  open,
+  onClose,
 }: {
   threadId: ThreadId;
-  onDone: () => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
-  const [color, setColor] = useState<string | undefined>(QUICK_PICKS[3]); // blue default
+  const [color, setColor] = useState<string | undefined>(QUICK_PICKS[3]);
   const addColumn = useKanbanStore((s) => s.addColumn);
 
   const submit = useCallback(() => {
     const trimmed = title.trim();
-    if (!trimmed) {
-      onDone();
-      return;
-    }
+    if (!trimmed) return;
     addColumn(threadId, trimmed, color);
-    onDone();
-  }, [title, color, addColumn, threadId, onDone]);
+    setTitle("");
+    setColor(QUICK_PICKS[3]);
+    onClose();
+  }, [title, color, addColumn, threadId, onClose]);
 
   return (
-    <div className="flex w-64 shrink-0 flex-col rounded-xl border border-dashed border-border bg-muted/10 p-3">
-      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        New column
-      </p>
-      <div className="space-y-2.5">
-        <input
-          autoFocus
-          className="w-full rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-ring"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-            if (e.key === "Escape") onDone();
-          }}
-          placeholder="Column name"
-        />
-        <KanbanColorPicker value={color} onChange={setColor} />
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={submit}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <CheckIcon className="size-3" />
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <XIcon className="size-3" />
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogPopup showCloseButton={false} className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add column</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+              <input
+                autoFocus
+                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                  if (e.key === "Escape") onClose();
+                }}
+                placeholder="Column name"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">Color</label>
+              <KanbanColorPicker value={color} onChange={setColor} />
+            </div>
+          </div>
+        </DialogPanel>
+        <DialogFooter variant="bare">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={submit}>Add column</Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 });
 
 // ─── Column ────────────────────────────────────────────────────────────────────
 
-interface ColumnProps {
+const Column = memo(function Column({
+  column,
+  threadId,
+  activeCardId,
+}: {
   column: KanbanColumn;
   threadId: ThreadId;
   activeCardId: string | null;
-}
-
-const Column = memo(function Column({ column, threadId, activeCardId }: ColumnProps) {
+}) {
   const [addingCard, setAddingCard] = useState(false);
-  const [editingHeader, setEditingHeader] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const cardIds = column.cards.map((c) => c.id);
   const deleteColumn = useKanbanStore((s) => s.deleteColumn);
@@ -391,77 +450,67 @@ const Column = memo(function Column({ column, threadId, activeCardId }: ColumnPr
     data: { type: "column", columnId: column.id },
   });
 
-  const accentColor = column.color ?? "#64748b";
+  const accentColor = columnColor(column);
 
   return (
-    <div className="flex w-64 shrink-0 flex-col rounded-xl border border-border bg-muted/30 overflow-hidden">
+    <>
+    <div className="flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-muted/30">
       {/* Color accent bar */}
       <div className="h-1 w-full shrink-0" style={{ backgroundColor: accentColor }} />
 
       <div className="flex flex-1 flex-col p-3">
         {/* Column header */}
-        {editingHeader ? (
-          <div className="mb-3">
-            <ColumnHeaderEditor
-              column={column}
-              threadId={threadId}
-              onDone={() => setEditingHeader(false)}
+        <div className="group mb-3 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: accentColor }}
             />
+            <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {column.title}
+            </h3>
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+              {column.cards.length}
+            </span>
           </div>
-        ) : (
-          <div className="group mb-3 flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              {/* Color dot */}
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: accentColor }}
-              />
-              <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {column.title}
-              </h3>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                {column.cards.length}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-              <button
-                type="button"
-                onClick={() => setEditingHeader(true)}
-                className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
-                aria-label="Edit column"
-              >
-                <PencilIcon className="size-3" />
-              </button>
-              {confirmDelete ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => deleteColumn(threadId, column.id)}
-                    className="rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </>
-              ) : (
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => setEditDialogOpen(true)}
+              className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+              aria-label="Edit column"
+            >
+              <PencilIcon className="size-3" />
+            </button>
+            {confirmDelete ? (
+              <>
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
-                  aria-label="Delete column"
+                  onClick={() => deleteColumn(threadId, column.id)}
+                  className="rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
                 >
-                  <Trash2Icon className="size-3" />
+                  Delete
                 </button>
-              )}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
+                aria-label="Delete column"
+              >
+                <Trash2Icon className="size-3" />
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Cards */}
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
@@ -492,7 +541,6 @@ const Column = memo(function Column({ column, threadId, activeCardId }: ColumnPr
           </div>
         </SortableContext>
 
-        {/* Add card */}
         {!addingCard && (
           <button
             type="button"
@@ -505,6 +553,14 @@ const Column = memo(function Column({ column, threadId, activeCardId }: ColumnPr
         )}
       </div>
     </div>
+
+    <EditColumnDialog
+      column={column}
+      threadId={threadId}
+      open={editDialogOpen}
+      onClose={() => setEditDialogOpen(false)}
+    />
+    </>
   );
 });
 
@@ -602,6 +658,7 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
   );
 
   return (
+    <>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
@@ -620,23 +677,25 @@ export default function KanbanBoard({ threadId }: { threadId: ThreadId }) {
             />
           ))}
 
-          {/* Add column */}
-          {addingColumn ? (
-            <AddColumnForm threadId={threadId} onDone={() => setAddingColumn(false)} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAddingColumn(true)}
-              className="flex h-10 w-48 shrink-0 items-center gap-2 rounded-xl border border-dashed border-border px-4 text-sm text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
-            >
-              <PlusIcon className="size-4" />
-              Add column
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setAddingColumn(true)}
+            className="flex h-10 w-48 shrink-0 items-center gap-2 rounded-xl border border-dashed border-border px-4 text-sm text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
+          >
+            <PlusIcon className="size-4" />
+            Add column
+          </button>
         </div>
       </div>
 
       <DragOverlay>{activeCard ? <CardGhost card={activeCard} /> : null}</DragOverlay>
     </DndContext>
+
+    <AddColumnDialog
+      threadId={threadId}
+      open={addingColumn}
+      onClose={() => setAddingColumn(false)}
+    />
+    </>
   );
 }
