@@ -16,14 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  CheckIcon,
-  GripVertical,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
-  XIcon,
-} from "lucide-react";
+import { GripVertical, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { memo, useCallback, useRef, useState } from "react";
 import type { ThreadId } from "@t3tools/contracts";
 import { cn } from "~/lib/utils";
@@ -179,41 +172,39 @@ const CardItem = memo(function CardItem({ card, columnId, threadId, isDragging }
           isDragging && "opacity-40",
         )}
       >
-        {/* Drag zone — full card height, only this area activates drag */}
+        {/* Drag zone — spans grip icon + title/description, full card height */}
         <div
           {...listeners}
-          className="flex cursor-grab items-center self-stretch px-2 active:cursor-grabbing"
+          className="flex min-w-0 flex-1 cursor-grab items-start gap-2 py-2.5 pl-3 active:cursor-grabbing"
           aria-label="Drag card"
         >
-          <GripVertical className="size-3.5 text-muted-foreground/20 transition-colors group-hover:text-muted-foreground/50" />
-        </div>
-
-        {/* Card content — no drag listeners, buttons work normally */}
-        <div className="flex min-w-0 flex-1 items-start gap-2 py-2.5 pr-3">
+          <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground/25 transition-colors group-hover:text-muted-foreground/55" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">{card.title}</p>
             {card.description && (
               <p className="mt-0.5 text-xs text-muted-foreground">{card.description}</p>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
-              aria-label="Edit card"
-            >
-              <PencilIcon className="size-3" />
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteCard(threadId, columnId, card.id)}
-              className="rounded p-0.5 text-muted-foreground/60 hover:text-destructive"
-              aria-label="Delete card"
-            >
-              <Trash2Icon className="size-3" />
-            </button>
-          </div>
+        </div>
+
+        {/* Action buttons — isolated from drag listeners */}
+        <div className="flex shrink-0 items-center gap-0.5 self-start py-2 pr-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="rounded p-1 text-muted-foreground/60 hover:text-foreground"
+            aria-label="Edit card"
+          >
+            <PencilIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => deleteCard(threadId, columnId, card.id)}
+            className="rounded p-1 text-muted-foreground/60 hover:text-destructive"
+            aria-label="Delete card"
+          >
+            <Trash2Icon className="size-3.5" />
+          </button>
         </div>
       </div>
 
@@ -246,63 +237,76 @@ const CardGhost = memo(function CardGhost({ card }: { card: KanbanCard }) {
   );
 });
 
-// ─── Add card form ─────────────────────────────────────────────────────────────
+// ─── Add card dialog ───────────────────────────────────────────────────────────
 
-const AddCardForm = memo(function AddCardForm({
+const AddCardDialog = memo(function AddCardDialog({
   columnId,
   threadId,
-  onDone,
+  open,
+  onClose,
 }: {
   columnId: string;
   threadId: ThreadId;
-  onDone: () => void;
+  open: boolean;
+  onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
   const addCard = useKanbanStore((s) => s.addCard);
 
   const submit = useCallback(() => {
     const trimmed = title.trim();
-    if (!trimmed) {
-      onDone();
-      return;
-    }
-    addCard(threadId, columnId, trimmed);
+    if (!trimmed) return;
+    const descTrimmed = desc.trim();
+    addCard(threadId, columnId, trimmed, descTrimmed || undefined);
     setTitle("");
-    onDone();
-  }, [title, addCard, threadId, columnId, onDone]);
+    setDesc("");
+    onClose();
+  }, [title, desc, addCard, threadId, columnId, onClose]);
 
   return (
-    <div className="rounded-lg border border-ring/40 bg-card p-2.5">
-      <input
-        autoFocus
-        className="w-full rounded bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/50"
-        placeholder="Card title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") submit();
-          if (e.key === "Escape") onDone();
-        }}
-      />
-      <div className="mt-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={submit}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <CheckIcon className="size-3" />
-          Add
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <XIcon className="size-3" />
-          Cancel
-        </button>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogPopup showCloseButton={false} className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add card</DialogTitle>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+              <input
+                autoFocus
+                className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                  if (e.key === "Escape") onClose();
+                }}
+                placeholder="Card title"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Description
+              </label>
+              <textarea
+                className="w-full resize-none rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground outline-none focus:border-ring placeholder:text-muted-foreground/40"
+                rows={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+                placeholder="Optional description…"
+              />
+            </div>
+          </div>
+        </DialogPanel>
+        <DialogFooter variant="bare">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={submit}>Add card</Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 });
 
@@ -531,28 +535,26 @@ const Column = memo(function Column({
                 isDragging={activeCardId === card.id}
               />
             ))}
-            {addingCard && (
-              <AddCardForm
-                columnId={column.id}
-                threadId={threadId}
-                onDone={() => setAddingCard(false)}
-              />
-            )}
           </div>
         </SortableContext>
 
-        {!addingCard && (
-          <button
-            type="button"
-            onClick={() => setAddingCard(true)}
-            className="mt-3 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <PlusIcon className="size-3.5" />
-            Add card
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setAddingCard(true)}
+          className="mt-3 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <PlusIcon className="size-3.5" />
+          Add card
+        </button>
       </div>
     </div>
+
+    <AddCardDialog
+      columnId={column.id}
+      threadId={threadId}
+      open={addingCard}
+      onClose={() => setAddingCard(false)}
+    />
 
     <EditColumnDialog
       column={column}
