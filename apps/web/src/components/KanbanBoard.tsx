@@ -17,15 +17,20 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import { memo, useCallback, useRef, useState } from "react";
-import type { ProjectId } from "@t3tools/contracts";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { ProjectId, ThreadId } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "~/lib/utils";
+import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
+import { readNativeApi } from "../nativeApi";
+import { useStore } from "../store";
 import {
   EMPTY_KANBAN_BOARD_SNAPSHOT,
   useKanbanStore,
   type KanbanCard,
   type KanbanColumn,
 } from "../kanbanStore";
+import { useKanbanDragStore } from "../kanbanDragStore";
 import { KanbanColorPicker, QUICK_PICKS } from "./KanbanColorPicker";
 import {
   Dialog,
@@ -572,6 +577,7 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
   const storedBoard = useKanbanStore((s) => s.boardsByProjectId[projectId]);
   const board = storedBoard ?? EMPTY_KANBAN_BOARD_SNAPSHOT;
   const moveCard = useKanbanStore((s) => s.moveCard);
+  const navigate = useNavigate();
 
   const [activeCard, setActiveCard] = useState<KanbanCard | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
@@ -581,11 +587,108 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  // ─── Track pointer position during drag to detect sidebar hover targets ───
+  useEffect(() => {
+    if (!activeCard) return;
+
+    const { setHoveredThreadId, setHoveredProjectId } = useKanbanDragStore.getState();
+
+    const onPointerMove = (e: PointerEvent) => {
+      const elements = document.elementsFromPoint(e.clientX, e.clientY);
+      let threadId: string | null = null;
+      let projectId_: string | null = null;
+      for (const el of elements) {
+        if (!threadId) {
+          const t = (el as HTMLElement).dataset["droppableThread"];
+          if (t) threadId = t;
+        }
+        if (!projectId_) {
+          const p = (el as HTMLElement).dataset["droppableProject"];
+          if (p) projectId_ = p;
+        }
+        if (threadId && projectId_) break;
+      }
+      setHoveredThreadId(threadId ? (threadId as ThreadId) : null);
+      setHoveredProjectId(projectId_ ? (projectId_ as ProjectId) : null);
+    };
+
+    document.addEventListener("pointermove", onPointerMove);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      setHoveredThreadId(null);
+      setHoveredProjectId(null);
+    };
+  }, [activeCard]);
+
+  // ─── Send card to existing thread ─────────────────────────────────────────
+  const sendCardToThread = useCallback(
+    async (card: KanbanCard, threadId: ThreadId) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const thread = useStore.getState().threads.find((t) => t.id === threadId);
+      if (!thread) return;
+      const text = card.description ? `${card.title}\n\n${card.description}` : card.title;
+      await api.orchestration.dispatchCommand({
+        type: "thread.turn.start",
+        commandId: newCommandId(),
+        threadId,
+        message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+        runtimeMode: thread.runtimeMode,
+        interactionMode: thread.interactionMode,
+        createdAt: new Date().toISOString(),
+      });
+      await navigate({ to: "/$threadId", params: { threadId } });
+    },
+    [navigate],
+  );
+
+  // ─── Create new thread in project and send card ───────────────────────────
+  const sendCardToProject = useCallback(
+    async (card: KanbanCard, targetProjectId: ProjectId) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const project = useStore.getState().projects.find((p) => p.id === targetProjectId);
+      if (!project) return;
+      const text = card.description ? `${card.title}\n\n${card.description}` : card.title;
+      const threadId = newThreadId();
+      const createdAt = new Date().toISOString();
+      await api.orchestration.dispatchCommand({
+        type: "thread.create",
+        commandId: newCommandId(),
+        threadId,
+        projectId: targetProjectId,
+        title: card.title,
+        model: project.model,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      });
+      await api.orchestration.dispatchCommand({
+        type: "thread.turn.start",
+        commandId: newCommandId(),
+        threadId,
+        message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdAt: new Date().toISOString(),
+      });
+      await navigate({ to: "/$threadId", params: { threadId } });
+    },
+    [navigate],
+  );
+
   const onDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current;
     if (data?.type === "card") {
-      setActiveCard(data.card as KanbanCard);
+      const card = data.card as KanbanCard;
+      setActiveCard(card);
       activeCardColumnRef.current = data.columnId as string;
+      useKanbanDragStore.getState().setDraggingCard({
+        title: card.title,
+        description: card.description,
+      });
     }
   }, []);
 
@@ -634,6 +737,23 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
       setActiveCard(null);
       activeCardColumnRef.current = null;
 
+      // Capture sidebar drop targets before clearing store state
+      const { hoveredThreadId, hoveredProjectId } = useKanbanDragStore.getState();
+      useKanbanDragStore.getState().setDraggingCard(null);
+      useKanbanDragStore.getState().setHoveredThreadId(null);
+      useKanbanDragStore.getState().setHoveredProjectId(null);
+
+      // Handle sidebar drops — takes priority over within-board reorder
+      if (prevCard && hoveredThreadId) {
+        void sendCardToThread(prevCard, hoveredThreadId);
+        return;
+      }
+      if (prevCard && hoveredProjectId) {
+        void sendCardToProject(prevCard, hoveredProjectId);
+        return;
+      }
+
+      // Normal within-board reorder
       const { active, over } = event;
       if (!over || !prevCard) return;
 
@@ -657,7 +777,7 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
 
       moveCard(projectId, cardId, fromColumnId, toColumnId, toIndex);
     },
-    [activeCard, moveCard, projectId],
+    [activeCard, moveCard, projectId, sendCardToThread, sendCardToProject],
   );
 
   return (

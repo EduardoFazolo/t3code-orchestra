@@ -67,7 +67,9 @@ import {
 } from "./ui/sidebar";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
+import { cn } from "~/lib/utils";
 import { resolveThreadStatusPill } from "./Sidebar.logic";
+import { useKanbanDragStore } from "../kanbanDragStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -254,6 +256,9 @@ export default function Sidebar() {
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
+  const kanbanDraggingCard = useKanbanDragStore((s) => s.draggingCard);
+  const kanbanHoveredThreadId = useKanbanDragStore((s) => s.hoveredThreadId);
+  const kanbanHoveredProjectId = useKanbanDragStore((s) => s.hoveredProjectId);
   const shouldBrowseForProjectImmediately = isElectron;
   const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
   const pendingApprovalByThreadId = useMemo(() => {
@@ -1157,12 +1162,21 @@ export default function Sidebar() {
                   }}
                 >
                   <SidebarMenuItem>
-                    <div className="group/project-header relative">
+                    <div
+                      className="group/project-header relative"
+                      data-droppable-project={project.id}
+                    >
                       <CollapsibleTrigger
                         render={
                           <SidebarMenuButton
                             size="sm"
-                            className="gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
+                            className={cn(
+                              "gap-2 px-2 py-1.5 text-left transition-all duration-150 hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground",
+                              kanbanDraggingCard && kanbanHoveredProjectId === project.id &&
+                                "bg-emerald-500/15 ring-1 ring-emerald-500/60 text-foreground",
+                              kanbanDraggingCard && kanbanHoveredProjectId !== project.id &&
+                                "opacity-60",
+                            )}
                           />
                         }
                         onContextMenu={(event) => {
@@ -1182,6 +1196,11 @@ export default function Sidebar() {
                         <span className="flex-1 truncate text-xs font-medium text-foreground/90">
                           {project.name}
                         </span>
+                        {kanbanDraggingCard && kanbanHoveredProjectId === project.id && (
+                          <span className="ml-1 shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 animate-in fade-in slide-in-from-right-2 duration-150">
+                            + New thread
+                          </span>
+                        )}
                       </CollapsibleTrigger>
                       <Tooltip>
                         <TooltipTrigger
@@ -1231,14 +1250,25 @@ export default function Sidebar() {
                           return (
                             <SidebarMenuSubItem key={thread.id} className="w-full">
                               <SidebarMenuSubButton
-                                render={<div role="button" tabIndex={0} />}
+                                render={
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    data-droppable-thread={thread.id}
+                                  />
+                                }
                                 size="sm"
                                 isActive={isActive}
-                                className={`h-7 w-full translate-x-0 cursor-default justify-start px-2 text-left hover:bg-accent hover:text-foreground ${
+                                className={cn(
+                                  "h-7 w-full translate-x-0 cursor-default justify-start px-2 text-left transition-all duration-150 hover:bg-accent hover:text-foreground",
                                   isActive
                                     ? "bg-accent/85 text-foreground font-medium ring-1 ring-border/70 dark:bg-accent/55 dark:ring-border/50"
-                                    : "text-muted-foreground"
-                                }`}
+                                    : "text-muted-foreground",
+                                  kanbanDraggingCard && kanbanHoveredThreadId === thread.id &&
+                                    "bg-primary/15 ring-1 ring-primary/60 text-foreground scale-[1.01]",
+                                  kanbanDraggingCard && kanbanHoveredThreadId !== thread.id &&
+                                    "opacity-50",
+                                )}
                                 onClick={() => {
                                   void navigate({
                                     to: "/$threadId",
@@ -1343,13 +1373,19 @@ export default function Sidebar() {
                                       />
                                     </span>
                                   )}
-                                  <span
-                                    className={`text-[10px] ${
-                                      isActive ? "text-foreground/65" : "text-muted-foreground/40"
-                                    }`}
-                                  >
-                                    {formatRelativeTime(thread.createdAt)}
-                                  </span>
+                                  {kanbanDraggingCard && kanbanHoveredThreadId === thread.id ? (
+                                    <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary animate-in fade-in slide-in-from-right-2 duration-150">
+                                      Send →
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`text-[10px] ${
+                                        isActive ? "text-foreground/65" : "text-muted-foreground/40"
+                                      }`}
+                                    >
+                                      {formatRelativeTime(thread.createdAt)}
+                                    </span>
+                                  )}
                                 </div>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
