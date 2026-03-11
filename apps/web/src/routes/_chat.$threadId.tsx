@@ -1,6 +1,7 @@
 import { ThreadId } from "@t3tools/contracts";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, type ReactNode, useCallback, useEffect } from "react";
+import { useWorkspaceTabStore, type WorkspaceTab } from "../workspaceTabStore";
 
 import ChatView from "../components/ChatView";
 import KanbanBoard from "../components/KanbanBoard";
@@ -150,8 +151,6 @@ const DiffPanelInlineSidebar = (props: {
   );
 };
 
-type WorkspaceTab = "chat" | "board";
-
 const WorkspaceTabBar = ({
   activeTab,
   onTabChange,
@@ -180,7 +179,8 @@ const WorkspaceTabBar = ({
 
 function ChatThreadRouteView() {
   const threadsHydrated = useStore((store) => store.threadsHydrated);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("chat");
+  const activeTab = useWorkspaceTabStore((s) => s.activeTab);
+  const setActiveTab = useWorkspaceTabStore((s) => s.setActiveTab);
   const navigate = useNavigate();
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
@@ -189,11 +189,12 @@ function ChatThreadRouteView() {
   const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
   const projectId = useStore(
     (store) => store.threads.find((t) => t.id === threadId)?.projectId,
-  );
+  ) ?? useComposerDraftStore.getState().getDraftThread(threadId)?.projectId;
   const draftThreadExists = useComposerDraftStore(
     (store) => Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
   const routeThreadExists = threadExists || draftThreadExists;
+
   const diffOpen = search.diff === "1";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   const closeDiff = useCallback(() => {

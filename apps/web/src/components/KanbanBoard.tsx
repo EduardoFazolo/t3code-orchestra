@@ -180,6 +180,7 @@ const CardItem = memo(function CardItem({ card, columnId, projectId, isDragging 
         {/* Drag zone — spans grip icon + title/description, full card height */}
         <div
           {...listeners}
+          onClick={() => setEditOpen(true)}
           className="flex min-w-0 flex-1 cursor-grab items-start gap-2 py-2.5 pl-3 active:cursor-grabbing"
           aria-label="Drag card"
         >
@@ -620,6 +621,30 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
     };
   }, [activeCard]);
 
+  // ─── Move card to "In Progress" column after dispatching ─────────────────
+  const moveCardToInProgress = useCallback(
+    (card: KanbanCard) => {
+      const board = useKanbanStore.getState().boardsByProjectId[projectId];
+      if (!board) return;
+      let currentColumnId: string | null = null;
+      for (const col of board.columns) {
+        if (col.cards.some((c) => c.id === card.id)) {
+          currentColumnId = col.id;
+          break;
+        }
+      }
+      if (!currentColumnId) return;
+      const inProgressCol = board.columns.find(
+        (col) =>
+          col.id === "in-progress" ||
+          col.title.toLowerCase().replace(/[\s-]/g, "") === "inprogress",
+      );
+      if (!inProgressCol || inProgressCol.id === currentColumnId) return;
+      moveCard(projectId, card.id, currentColumnId, inProgressCol.id, inProgressCol.cards.length);
+    },
+    [projectId, moveCard],
+  );
+
   // ─── Send card to existing thread ─────────────────────────────────────────
   const sendCardToThread = useCallback(
     async (card: KanbanCard, threadId: ThreadId) => {
@@ -637,9 +662,10 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
         interactionMode: thread.interactionMode,
         createdAt: new Date().toISOString(),
       });
+      moveCardToInProgress(card);
       await navigate({ to: "/$threadId", params: { threadId } });
     },
-    [navigate],
+    [navigate, moveCardToInProgress],
   );
 
   // ─── Create new thread in project and send card ───────────────────────────
@@ -674,9 +700,10 @@ export default function KanbanBoard({ projectId }: { projectId: ProjectId }) {
         interactionMode: "default",
         createdAt: new Date().toISOString(),
       });
+      moveCardToInProgress(card);
       await navigate({ to: "/$threadId", params: { threadId } });
     },
-    [navigate],
+    [navigate, moveCardToInProgress],
   );
 
   const onDragStart = useCallback((event: DragStartEvent) => {

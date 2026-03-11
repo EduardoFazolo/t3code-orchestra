@@ -70,6 +70,7 @@ import { isNonEmpty as isNonEmptyString } from "effect/String";
 import { cn } from "~/lib/utils";
 import { resolveThreadStatusPill } from "./Sidebar.logic";
 import { useKanbanDragStore } from "../kanbanDragStore";
+import { useWorkspaceTabStore } from "../workspaceTabStore";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
@@ -257,6 +258,7 @@ export default function Sidebar() {
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const kanbanDraggingCard = useKanbanDragStore((s) => s.draggingCard);
+  const setWorkspaceTab = useWorkspaceTabStore((s) => s.setActiveTab);
   const kanbanHoveredThreadId = useKanbanDragStore((s) => s.hoveredThreadId);
   const kanbanHoveredProjectId = useKanbanDragStore((s) => s.hoveredProjectId);
   const shouldBrowseForProjectImmediately = isElectron;
@@ -1265,11 +1267,12 @@ export default function Sidebar() {
                                     ? "bg-accent/85 text-foreground font-medium ring-1 ring-border/70 dark:bg-accent/55 dark:ring-border/50"
                                     : "text-muted-foreground",
                                   kanbanDraggingCard && kanbanHoveredThreadId === thread.id &&
-                                    "bg-primary/15 ring-1 ring-primary/60 text-foreground scale-[1.01]",
+                                    "bg-primary/15 ring-1 ring-primary/60 text-foreground scale-[1.04]",
                                   kanbanDraggingCard && kanbanHoveredThreadId !== thread.id &&
                                     "opacity-50",
                                 )}
                                 onClick={() => {
+                                  setWorkspaceTab("chat");
                                   void navigate({
                                     to: "/$threadId",
                                     params: { threadId: thread.id },
@@ -1278,6 +1281,7 @@ export default function Sidebar() {
                                 onKeyDown={(event) => {
                                   if (event.key !== "Enter" && event.key !== " ") return;
                                   event.preventDefault();
+                                  setWorkspaceTab("chat");
                                   void navigate({
                                     to: "/$threadId",
                                     params: { threadId: thread.id },
